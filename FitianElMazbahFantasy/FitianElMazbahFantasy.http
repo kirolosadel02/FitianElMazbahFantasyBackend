@@ -1,0 +1,6 @@
+@FitianElMazbahFantasy_HostAddress = http://localhost:5057
+
+GET {{FitianElMazbahFantasy_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
