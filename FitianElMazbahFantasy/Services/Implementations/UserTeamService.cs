@@ -34,7 +34,7 @@ public class UserTeamService : IUserTeamService
         {
             return await _unitOfWork.Repository<UserTeam>().GetByIdAsync(id, cancellationToken, 
                 ut => ut.User, 
-                ut => ut.UserTeamPlayers);
+                ut => ut.UserTeamPlayers.Select(utp => utp.Player).Select(p => p.Team));
         }
         catch (Exception ex)
         {
@@ -67,7 +67,7 @@ public class UserTeamService : IUserTeamService
                 ut => ut.UserId == userId, 
                 cancellationToken, 
                 ut => ut.User, 
-                ut => ut.UserTeamPlayers);
+                ut => ut.UserTeamPlayers.Select(utp => utp.Player).Select(p => p.Team));
         }
         catch (Exception ex)
         {
@@ -160,4 +160,126 @@ public class UserTeamService : IUserTeamService
             throw;
         }
     }
+
+    #region Player Management Methods
+
+    public async Task<bool> AddPlayerToTeamAsync(int teamId, int playerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Check if player is already in the team
+            var existingPlayerTeam = await _unitOfWork.Repository<UserTeamPlayer>()
+                .FirstOrDefaultAsync(utp => utp.UserTeamId == teamId && utp.PlayerId == playerId, cancellationToken);
+            
+            if (existingPlayerTeam != null)
+            {
+                return false; // Player already in team
+            }
+
+            var userTeamPlayer = new UserTeamPlayer
+            {
+                UserTeamId = teamId,
+                PlayerId = playerId,
+                AddedAt = DateTime.UtcNow
+            };
+
+            await _unitOfWork.Repository<UserTeamPlayer>().AddAsync(userTeamPlayer, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Player {PlayerId} added to team {TeamId}", playerId, teamId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding player {PlayerId} to team {TeamId}", playerId, teamId);
+            throw;
+        }
+    }
+
+    public async Task<bool> RemovePlayerFromTeamAsync(int teamId, int playerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var userTeamPlayer = await _unitOfWork.Repository<UserTeamPlayer>()
+                .FirstOrDefaultAsync(utp => utp.UserTeamId == teamId && utp.PlayerId == playerId, cancellationToken);
+
+            if (userTeamPlayer == null)
+            {
+                return false; // Player not in team
+            }
+
+            _unitOfWork.Repository<UserTeamPlayer>().Remove(userTeamPlayer);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Player {PlayerId} removed from team {TeamId}", playerId, teamId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing player {PlayerId} from team {TeamId}", playerId, teamId);
+            throw;
+        }
+    }
+
+    public async Task<bool> IsPlayerInTeamAsync(int teamId, int playerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _unitOfWork.Repository<UserTeamPlayer>()
+                .AnyAsync(utp => utp.UserTeamId == teamId && utp.PlayerId == playerId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if player {PlayerId} is in team {TeamId}", playerId, teamId);
+            throw;
+        }
+    }
+
+    public async Task<int> GetTeamPlayerCountAsync(int teamId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await _unitOfWork.Repository<UserTeamPlayer>()
+                .CountAsync(utp => utp.UserTeamId == teamId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting player count for team {TeamId}", teamId);
+            throw;
+        }
+    }
+
+    public async Task<int> GetGoalkeeperCountAsync(int teamId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var goalkeepers = await _unitOfWork.Repository<UserTeamPlayer>()
+                .FindAsync(utp => utp.UserTeamId == teamId, cancellationToken, utp => utp.Player);
+
+            return goalkeepers.Count(utp => utp.Player?.Position == PlayerPosition.Goalkeeper);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting goalkeeper count for team {TeamId}", teamId);
+            throw;
+        }
+    }
+
+    public async Task<bool> HasPlayerFromSameTeamAsync(int userTeamId, int realTeamId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var playersFromTeam = await _unitOfWork.Repository<UserTeamPlayer>()
+                .FindAsync(utp => utp.UserTeamId == userTeamId, cancellationToken, utp => utp.Player);
+
+            return playersFromTeam.Any(utp => utp.Player?.TeamId == realTeamId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking if team {UserTeamId} has player from real team {RealTeamId}", userTeamId, realTeamId);
+            throw;
+        }
+    }
+
+    #endregion
 }

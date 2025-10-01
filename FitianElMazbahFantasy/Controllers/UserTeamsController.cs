@@ -5,6 +5,7 @@ using FitianElMazbahFantasy.Models;
 using FitianElMazbahFantasy.Services.Interfaces;
 using FitianElMazbahFantasy.DTOs.UserTeam;
 using FitianElMazbahFantasy.Extensions;
+using FitianElMazbahFantasy.Constants;
 
 namespace FitianElMazbahFantasy.Controllers;
 
@@ -13,11 +14,22 @@ namespace FitianElMazbahFantasy.Controllers;
 public class UserTeamsController : ControllerBase
 {
     private readonly IUserTeamService _userTeamService;
+    private readonly IPlayerService _playerService;
+    private readonly ITeamConstraintService _teamConstraintService;
+    private readonly IMatchweekService _matchweekService;
     private readonly ILogger<UserTeamsController> _logger;
 
-    public UserTeamsController(IUserTeamService userTeamService, ILogger<UserTeamsController> logger)
+    public UserTeamsController(
+        IUserTeamService userTeamService, 
+        IPlayerService playerService,
+        ITeamConstraintService teamConstraintService,
+        IMatchweekService matchweekService,
+        ILogger<UserTeamsController> logger)
     {
         _userTeamService = userTeamService ?? throw new ArgumentNullException(nameof(userTeamService));
+        _playerService = playerService ?? throw new ArgumentNullException(nameof(playerService));
+        _teamConstraintService = teamConstraintService ?? throw new ArgumentNullException(nameof(teamConstraintService));
+        _matchweekService = matchweekService ?? throw new ArgumentNullException(nameof(matchweekService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -189,6 +201,30 @@ public class UserTeamsController : ControllerBase
         }
     }
 
+    [HttpGet("my-team/composition")]
+    [Authorize]
+    public async Task<ActionResult<TeamCompositionStats>> GetMyTeamComposition(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var userTeam = await _userTeamService.GetUserTeamByUserIdAsync(currentUserId, cancellationToken);
+            
+            if (userTeam == null)
+            {
+                return NotFound(new { message = "You don't have a team yet" });
+            }
+
+            var stats = await _teamConstraintService.GetTeamCompositionStatsAsync(userTeam.Id, cancellationToken);
+            return Ok(stats);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting current user's team composition");
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
     [HttpPost]
     [Authorize]
     public async Task<ActionResult<UserTeamDto>> CreateUserTeam(CreateUserTeamDto createTeamDto, CancellationToken cancellationToken = default)
@@ -331,6 +367,220 @@ public class UserTeamsController : ControllerBase
 
     #endregion
 
+    #region Player Management
+
+    [HttpPost("{teamId}/players/{playerId}")]
+    [Authorize]
+    public async Task<ActionResult> AddPlayerToTeam(int teamId, int playerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var currentUserRole = GetCurrentUserRole();
+
+            var userTeam = await _userTeamService.GetUserTeamWithDetailsAsync(teamId, cancellationToken);
+            if (userTeam == null)
+            {
+                return NotFound(new { message = "Team not found" });
+            }
+
+            // Users can only modify their own team, admins can modify any team
+            if (currentUserRole != "Admin" && userTeam.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            // Check if team is locked
+            if (userTeam.IsLocked)
+            {
+                return BadRequest(new { message = "Team is locked and cannot be modified" });
+            }
+
+            // Check current matchweek deadline (if available)
+            var currentMatchweek = await _matchweekService.GetCurrentMatchweekAsync(cancellationToken);
+            if (currentMatchweek != null)
+            {
+                var canModify = await _matchweekService.CanModifyTeamsAsync(currentMatchweek.Id, cancellationToken);
+                if (!canModify)
+                {
+                    return BadRequest(new { message = "Cannot modify team after matchweek deadline" });
+                }
+            }
+
+            // Validate player addition using enhanced constraint service
+            var validationResult = await _teamConstraintService.ValidatePlayerAdditionAsync(teamId, playerId, cancellationToken);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { message = validationResult.ErrorMessage, violations = validationResult.Violations });
+            }
+
+            // Add player to team
+            var success = await _userTeamService.AddPlayerToTeamAsync(teamId, playerId, cancellationToken);
+            if (!success)
+            {
+                return BadRequest(new { message = "Failed to add player to team" });
+            }
+
+            return Ok(new { message = "Player added to team successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding player {PlayerId} to team {TeamId}", playerId, teamId);
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpDelete("{teamId}/players/{playerId}")]
+    [Authorize]
+    public async Task<ActionResult> RemovePlayerFromTeam(int teamId, int playerId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var currentUserRole = GetCurrentUserRole();
+
+            var userTeam = await _userTeamService.GetUserTeamWithDetailsAsync(teamId, cancellationToken);
+            if (userTeam == null)
+            {
+                return NotFound(new { message = "Team not found" });
+            }
+
+            // Users can only modify their own team, admins can modify any team
+            if (currentUserRole != "Admin" && userTeam.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            // Check if team is locked
+            if (userTeam.IsLocked)
+            {
+                return BadRequest(new { message = "Team is locked and cannot be modified" });
+            }
+
+            // Check current matchweek deadline (if available)
+            var currentMatchweek = await _matchweekService.GetCurrentMatchweekAsync(cancellationToken);
+            if (currentMatchweek != null)
+            {
+                var canModify = await _matchweekService.CanModifyTeamsAsync(currentMatchweek.Id, cancellationToken);
+                if (!canModify)
+                {
+                    return BadRequest(new { message = "Cannot modify team after matchweek deadline" });
+                }
+            }
+
+            // Check if player is in the team
+            var isPlayerInTeam = await _userTeamService.IsPlayerInTeamAsync(teamId, playerId, cancellationToken);
+            if (!isPlayerInTeam)
+            {
+                return NotFound(new { message = "Player is not in your team" });
+            }
+
+            // Remove player from team
+            var success = await _userTeamService.RemovePlayerFromTeamAsync(teamId, playerId, cancellationToken);
+            if (!success)
+            {
+                return BadRequest(new { message = "Failed to remove player from team" });
+            }
+
+            return Ok(new { message = "Player removed from team successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error removing player {PlayerId} from team {TeamId}", playerId, teamId);
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpPost("{teamId}/lock")]
+    [Authorize]
+    public async Task<ActionResult> LockTeam(int teamId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var currentUserId = GetCurrentUserId();
+            var currentUserRole = GetCurrentUserRole();
+
+            var existingTeam = await _userTeamService.GetUserTeamWithDetailsAsync(teamId, cancellationToken);
+            if (existingTeam == null)
+            {
+                return NotFound();
+            }
+
+            // Users can only lock their own team, admins can lock any team
+            if (currentUserRole != "Admin" && existingTeam.UserId != currentUserId)
+            {
+                return Forbid();
+            }
+
+            if (existingTeam.IsLocked)
+            {
+                return BadRequest(new { message = "Team is already locked" });
+            }
+
+            // Validate team composition for locking using enhanced constraint service
+            var validationResult = await _teamConstraintService.ValidateTeamForLockingAsync(teamId, cancellationToken);
+            if (!validationResult.IsValid)
+            {
+                return BadRequest(new { message = validationResult.ErrorMessage, violations = validationResult.Violations });
+            }
+
+            // Create team snapshot for current matchweek if available
+            var currentMatchweek = await _matchweekService.GetCurrentMatchweekAsync(cancellationToken);
+            if (currentMatchweek != null)
+            {
+                try
+                {
+                    await _matchweekService.CreateTeamSnapshotAsync(teamId, currentMatchweek.Id, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to create team snapshot for team {TeamId} in matchweek {MatchweekId}", teamId, currentMatchweek.Id);
+                }
+            }
+
+            existingTeam.IsLocked = true;
+            var updatedTeam = await _userTeamService.UpdateUserTeamAsync(existingTeam, cancellationToken);
+            
+            return Ok(new { message = "Team locked successfully", team = updatedTeam.ToDto() });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error locking team with id {TeamId}", teamId);
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    [HttpPost("{teamId}/unlock")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult> UnlockTeam(int teamId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var existingTeam = await _userTeamService.GetUserTeamByIdAsync(teamId, cancellationToken);
+            if (existingTeam == null)
+            {
+                return NotFound();
+            }
+
+            if (!existingTeam.IsLocked)
+            {
+                return BadRequest(new { message = "Team is not locked" });
+            }
+
+            existingTeam.IsLocked = false;
+            var updatedTeam = await _userTeamService.UpdateUserTeamAsync(existingTeam, cancellationToken);
+            
+            return Ok(new { message = "Team unlocked successfully", team = updatedTeam.ToDto() });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error unlocking team with id {TeamId}", teamId);
+            return StatusCode(500, new { message = "Internal server error" });
+        }
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private int GetCurrentUserId()
@@ -380,4 +630,16 @@ public class UserTeamsController : ControllerBase
     }
 
     #endregion
+}
+
+public class ValidationResult
+{
+    public bool IsValid { get; }
+    public string ErrorMessage { get; }
+
+    public ValidationResult(bool isValid, string errorMessage)
+    {
+        IsValid = isValid;
+        ErrorMessage = errorMessage;
+    }
 }

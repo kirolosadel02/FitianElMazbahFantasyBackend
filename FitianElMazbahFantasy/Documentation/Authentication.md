@@ -1,95 +1,73 @@
-# JWT Authentication & Authorization Implementation
+# JWT Authentication Implementation Details
 
-## Overview
+## Configuration
 
-This implementation provides a comprehensive JWT-based authentication and authorization system for the FitianElMazbahFantasy application with role-based access control.
-
-## Key Features
-
-### ?? **Security Features**
-- JWT Access Tokens with configurable expiration
-- Refresh Tokens for secure token renewal
-- Role-based authorization (Admin/User)
-- Password hashing with salt
-- Token revocation support
-- Admin role protection (cannot be set via API)
-
-### ?? **Authentication Endpoints**
-
-#### Public Endpoints (No Authentication Required)
-```
-POST /api/users/register     - User registration (User role only)
-POST /api/users/login        - User login
-POST /api/users/refresh-token - Token refresh
-```
-
-#### Protected Endpoints (Authentication Required)
-```
-POST /api/users/logout       - Logout (revoke refresh token)
-POST /api/users/logout-all   - Logout from all devices
-GET  /api/users/profile      - Get current user profile
-```
-
-#### Admin Only Endpoints
-```
-GET    /api/users            - Get all users
-DELETE /api/users/{id}       - Delete user
-```
-
-#### User/Admin Endpoints (Self or Admin Access)
-```
-GET /api/users/{id}          - Get user by ID
-GET /api/users/{id}/teams    - Get user with teams
-```
-
-## Architecture
-
-### 1. JWT Configuration
+### JWT Settings (appsettings.json)
 ```json
 {
   "JwtSettings": {
     "SecretKey": "YourSecretKeyHere",
     "Issuer": "FitianElMazbahFantasy",
-    "Audience": "FitianElMazbahFantasyUsers", 
+    "Audience": "FitianElMazbahFantasyUsers",
     "ExpirationInMinutes": 60,
     "RefreshTokenExpirationInDays": 7
   }
 }
 ```
 
-### 2. Token Structure
-**Access Token Claims:**
-- `NameIdentifier`: User ID
+### Service Registration (ServiceCollectionExtensions.cs)
+```csharp
+public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
+{
+    services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+    
+    var jwtSettings = configuration.GetSection(JwtSettings.SectionName);
+    var key = Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]);
+
+    services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(key),
+                ValidateIssuer = true,
+                ValidIssuer = jwtSettings["Issuer"],
+                ValidateAudience = true,
+                ValidAudience = jwtSettings["Audience"],
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            };
+        });
+
+    services.AddAuthorization(options =>
+    {
+        options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+        options.AddPolicy("UserOnly", policy => policy.RequireRole("User"));
+    });
+
+    return services;
+}
+```
+
+## Token Structure
+
+### Access Token Claims
+- `NameIdentifier`: User ID (primary identifier)
 - `Name`: Username
-- `Email`: User Email
-- `Role`: User Role (Admin/User)
+- `Email`: User email address
+- `Role`: User role (Admin/User)
 - Custom claims: `userId`, `username`
 
-**Refresh Token:**
+### Refresh Token
 - Cryptographically secure random string
 - Stored in database with expiration
-- Can be revoked individually or all at once
-
-### 3. Role-Based Authorization
-
-#### User Role (Default)
-- Can register via API
-- Access to own profile and teams
-- Can create fantasy teams
-- Can participate in leagues
-
-#### Admin Role (Manual Only)
-- Cannot be set via registration API
-- Must be created manually in database
-- Full access to user management
-- Can manage teams, players, fixtures
-- Can view all user data
+- Individual and bulk revocation support
 
 ## Security Implementation
 
-### Password Security
+### Password Hashing
 ```csharp
-// Simple hashing implementation (enhance for production)
 public string HashPassword(string password)
 {
     using var sha256 = SHA256.Create();
@@ -98,151 +76,66 @@ public string HashPassword(string password)
 }
 ```
 
-### Token Validation
-- Signature validation using HMAC SHA256
-- Issuer and Audience validation
-- Expiration time validation
-- Zero clock skew for precise timing
-
-### Authorization Policies
+### Authorization Patterns
 ```csharp
-services.AddAuthorization(options =>
+// Controller level
+[Authorize(Roles = "Admin")]
+public class AdminController : ControllerBase { }
+
+// Action level
+[Authorize]
+public async Task<ActionResult> GetProfile() { }
+
+// Custom authorization logic
+private string GetCurrentUserRole()
 {
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("UserOnly", policy => policy.RequireRole("User"));
-    options.AddPolicy("AdminOrUser", policy => policy.RequireRole("Admin", "User"));
-});
-```
-
-## Usage Examples
-
-### 1. User Registration
-```http
-POST /api/users/register
-Content-Type: application/json
-
-{
-  "username": "johndoe",
-  "email": "john@example.com",
-  "password": "securePassword123",
-  "confirmPassword": "securePassword123"
+    return User.FindFirst(ClaimTypes.Role)?.Value ?? "User";
 }
-```
-
-**Response:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "base64EncodedRefreshToken",
-  "expiresAt": "2024-01-01T12:00:00Z",
-  "user": {
-    "id": 1,
-    "username": "johndoe",
-    "email": "john@example.com",
-    "role": "User",
-    "createdAt": "2024-01-01T11:00:00Z"
-  }
-}
-```
-
-### 2. User Login
-```http
-POST /api/users/login
-Content-Type: application/json
-
-{
-  "usernameOrEmail": "johndoe",
-  "password": "securePassword123"
-}
-```
-
-### 3. Token Refresh
-```http
-POST /api/users/refresh-token
-Content-Type: application/json
-
-{
-  "refreshToken": "base64EncodedRefreshToken"
-}
-```
-
-### 4. Accessing Protected Endpoints
-```http
-GET /api/users/profile
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 ## Admin User Creation
 
-Since admin users cannot be created via the API, they must be added manually:
+Admin users cannot be created via API registration. Create manually:
 
-### SQL Script to Create Admin User
 ```sql
--- First, create the admin user
+-- Create admin user in database
 INSERT INTO Users (Username, Email, Password, Role, CreatedAt)
 VALUES (
     'admin',
     'admin@fitianelmazbah.com',
-    'HashedPasswordHere', -- Use the same hashing method as the application
+    'YourHashedPasswordHere', -- Use application's hash method
     2, -- UserRole.Admin = 2
     GETUTCDATE()
 );
 ```
 
-### Using the Application's Hash Method
+## Token Management
+
+### Refresh Token Flow
+1. User logs in ? receives access token + refresh token
+2. Access token expires ? use refresh token to get new access token
+3. Refresh token expires ? user must login again
+
+### Token Revocation
+- **Single device logout**: Revokes specific refresh token
+- **All devices logout**: Revokes all user's refresh tokens
+- **Admin revocation**: Admin can revoke any user's tokens
+
+## Production Security Considerations
+
+1. **HTTPS Only**: Set `RequireHttpsMetadata = true`
+2. **Secure Storage**: Store refresh tokens in HTTP-only cookies
+3. **Rate Limiting**: Implement rate limiting for auth endpoints
+4. **Enhanced Hashing**: Use BCrypt.Net instead of SHA256
+5. **Audit Logging**: Log all authentication events
+6. **Token Blacklisting**: Consider token blacklisting for immediate revocation
+
+## Middleware Pipeline Order
+
 ```csharp
-// In a console app or startup code
-var authService = serviceProvider.GetService<IAuthService>();
-var hashedPassword = authService.HashPassword("AdminPassword123");
-// Use this hashedPassword in the SQL insert
+app.UseAuthentication();  // Validates JWT tokens
+app.UseAuthorization();   // Enforces role-based policies
+app.MapControllers();     // Routes to controllers
 ```
 
-## Middleware Pipeline
-
-The authentication middleware is configured in the correct order:
-
-1. `UseAuthentication()` - Validates JWT tokens
-2. `UseAuthorization()` - Enforces role-based policies
-3. `MapControllers()` - Routes to controllers with `[Authorize]` attributes
-
-## Swagger Integration
-
-JWT authentication is integrated with Swagger UI:
-- Authorization button in Swagger UI
-- Enter token as: `Bearer your-jwt-token-here`
-- Test protected endpoints directly from Swagger
-
-## Best Practices Implemented
-
-### 1. **Security**
-- Tokens stored in memory (client-side)
-- Refresh tokens in secure HTTP-only cookies (recommended for production)
-- Admin role cannot be assigned via API
-- Comprehensive input validation
-
-### 2. **Error Handling**
-- Structured error responses
-- Detailed logging without exposing sensitive data
-- Proper HTTP status codes
-
-### 3. **Token Management**
-- Short-lived access tokens (60 minutes)
-- Long-lived refresh tokens (7 days)
-- Token revocation on logout
-- Ability to logout from all devices
-
-### 4. **Authorization Patterns**
-- Method-level authorization with `[Authorize]` attributes
-- Role-based policies
-- Resource-based authorization (users can only access their own data)
-
-## Production Considerations
-
-1. **Use HTTPS Only**: Set `RequireHttpsMetadata = true`
-2. **Secure Refresh Tokens**: Store in HTTP-only cookies
-3. **Enhanced Password Hashing**: Use BCrypt.Net or ASP.NET Core Identity
-4. **Rate Limiting**: Implement rate limiting for auth endpoints
-5. **Audit Logging**: Log all authentication events
-6. **Token Blacklisting**: Consider implementing token blacklisting for immediate revocation
-
-This implementation provides a solid foundation for authentication and authorization while maintaining security best practices and flexibility for future enhancements.
+This implementation provides secure JWT-based authentication with role-based authorization suitable for the fantasy football system.

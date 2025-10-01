@@ -24,6 +24,9 @@ public class FixtureConfiguration : IEntityTypeConfiguration<Fixture>
         builder.Property(f => f.MatchWeek)
             .IsRequired();
             
+        builder.Property(f => f.MatchweekId)
+            .IsRequired();
+            
         builder.Property(f => f.MatchDate)
             .IsRequired();
         
@@ -33,12 +36,15 @@ public class FixtureConfiguration : IEntityTypeConfiguration<Fixture>
             
         builder.Property(f => f.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("GETUTCDATE()")
+            .HasColumnType("datetimeoffset");
             
-        builder.Property(f => f.UpdatedAt);
+        builder.Property(f => f.UpdatedAt)
+            .HasColumnType("datetimeoffset");
 
         // Indexes
         builder.HasIndex(f => f.MatchWeek);
+        builder.HasIndex(f => f.MatchweekId);
         builder.HasIndex(f => f.MatchDate);
         builder.HasIndex(f => f.IsCompleted);
         
@@ -51,6 +57,11 @@ public class FixtureConfiguration : IEntityTypeConfiguration<Fixture>
         builder.HasOne(f => f.Team2)
             .WithMany()
             .HasForeignKey(f => f.Team2Id)
+            .OnDelete(DeleteBehavior.Restrict);
+            
+        builder.HasOne(f => f.Matchweek)
+            .WithMany(m => m.Fixtures)
+            .HasForeignKey(f => f.MatchweekId)
             .OnDelete(DeleteBehavior.Restrict);
             
         builder.HasOne(f => f.MatchResult)

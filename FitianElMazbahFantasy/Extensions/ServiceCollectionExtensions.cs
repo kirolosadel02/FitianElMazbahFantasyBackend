@@ -33,6 +33,9 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IUserTeamService, UserTeamService>();
+        services.AddScoped<IPlayerService, PlayerService>();
+        services.AddScoped<ITeamConstraintService, TeamConstraintService>();
+        services.AddScoped<IMatchweekService, MatchweekService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         

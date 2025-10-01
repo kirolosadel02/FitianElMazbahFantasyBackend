@@ -1,127 +1,117 @@
-# Repository Pattern & Unit of Work Implementation
+# Repository Pattern & Unit of Work
 
-## Overview
+## Architecture Overview
 
-This implementation follows best practices for the Repository Pattern and Unit of Work in .NET 8, providing a clean abstraction layer over Entity Framework Core.
+The system implements Repository Pattern with Unit of Work for clean data access abstraction over Entity Framework Core.
 
-## Architecture
+### Key Components
 
-### 1. Generic Repository Pattern
-- **Interface**: `IGenericRepository<T>`
-- **Implementation**: `GenericRepository<T>`
-- **Benefits**:
-  - Code reusability across all entities
-  - Consistent API for CRUD operations
-  - Support for includes/eager loading
-  - Pagination support
-  - CancellationToken support for async operations
+1. **Generic Repository**: `IGenericRepository<T>` - Reusable CRUD operations
+2. **Unit of Work**: `IUnitOfWork` - Transaction management and repository factory
+3. **Service Layer**: Business logic encapsulation with repository orchestration
 
-### 2. Unit of Work Pattern
-- **Interface**: `IUnitOfWork`
-- **Implementation**: `UnitOfWork`
-- **Features**:
-  - Transaction management
-  - Single point of save changes
-  - Repository factory pattern
-  - Thread-safe repository caching
-  - Proper disposal pattern
+## Core Interfaces
 
-### 3. Service Layer
-- **Example**: `IUserService` / `UserService`
-- **Purpose**: 
-  - Business logic encapsulation
-  - Transaction coordination
-  - Error handling and logging
-  - Validation
-
-## Key Features
-
-### Generic Repository Features
+### Generic Repository
 ```csharp
-// Basic operations
-Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
-Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default);
-
-// With includes (eager loading)
-Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default, params Expression<Func<T, object>>[] includes);
-
-// Querying
-Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
-Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
-
-// Pagination
-Task<IEnumerable<T>> GetPagedAsync(int pageNumber, int pageSize, CancellationToken cancellationToken = default);
-
-// CRUD operations
-Task AddAsync(T entity, CancellationToken cancellationToken = default);
-void Update(T entity);
-void Remove(T entity);
-```
-
-### Unit of Work Features
-```csharp
-// Repository factory
-IGenericRepository<T> Repository<T>() where T : class;
-
-// Transaction management
-Task BeginTransactionAsync(CancellationToken cancellationToken = default);
-Task CommitTransactionAsync(CancellationToken cancellationToken = default);
-Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
-
-// Save changes
-Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-```
-
-## Usage Examples
-
-### Basic Repository Usage
-```csharp
-// Dependency injection
-public class UserService
+public interface IGenericRepository<T> where T : class
 {
-    private readonly IUnitOfWork _unitOfWork;
+    // Basic operations
+    Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<IEnumerable<T>> GetAllAsync(CancellationToken cancellationToken = default);
     
-    public UserService(IUnitOfWork unitOfWork)
-    {
-        _unitOfWork = unitOfWork;
-    }
+    // With eager loading
+    Task<T?> GetByIdAsync(int id, CancellationToken cancellationToken = default, 
+        params Expression<Func<T, object>>[] includes);
     
-    // Get user with teams
-    public async Task<User?> GetUserWithTeamsAsync(int id)
-    {
-        return await _unitOfWork.Repository<User>()
-            .GetByIdAsync(id, u => u.UserTeams);
-    }
+    // Querying
+    Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, 
+        CancellationToken cancellationToken = default);
+    Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate, 
+        CancellationToken cancellationToken = default);
+    Task<bool> AnyAsync(Expression<Func<T, bool>> predicate, 
+        CancellationToken cancellationToken = default);
     
-    // Create user with validation
-    public async Task<User> CreateUserAsync(User user)
+    // Pagination
+    Task<IEnumerable<T>> GetPagedAsync(int pageNumber, int pageSize, 
+        CancellationToken cancellationToken = default);
+    
+    // CRUD operations
+    Task AddAsync(T entity, CancellationToken cancellationToken = default);
+    void Update(T entity);
+    void Remove(T entity);
+}
+```
+
+### Unit of Work
+```csharp
+public interface IUnitOfWork : IDisposable
+{
+    IGenericRepository<T> Repository<T>() where T : class;
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task BeginTransactionAsync(CancellationToken cancellationToken = default);
+    Task CommitTransactionAsync(CancellationToken cancellationToken = default);
+    Task RollbackTransactionAsync(CancellationToken cancellationToken = default);
+}
+```
+
+## Implementation Highlights
+
+### Repository Factory Pattern
+```csharp
+public class UnitOfWork : IUnitOfWork
+{
+    private readonly ConcurrentDictionary<Type, object> _repositories;
+    
+    public IGenericRepository<T> Repository<T>() where T : class
     {
-        await _unitOfWork.Repository<User>().AddAsync(user);
-        await _unitOfWork.SaveChangesAsync();
-        return user;
+        return (IGenericRepository<T>)_repositories.GetOrAdd(typeof(T), 
+            _ => new GenericRepository<T>(_context));
     }
 }
 ```
 
-### Transaction Usage
+### Service Layer Usage
 ```csharp
-public async Task<UserTeam> CreateUserTeamWithPlayersAsync(UserTeam team, List<Player> players)
+public class PlayerService : IPlayerService
+{
+    private readonly IUnitOfWork _unitOfWork;
+    
+    public async Task<Player?> GetPlayerByIdAsync(int id)
+    {
+        return await _unitOfWork.Repository<Player>()
+            .GetByIdAsync(id, p => p.Team); // With eager loading
+    }
+    
+    public async Task<Player> CreatePlayerAsync(Player player)
+    {
+        await _unitOfWork.Repository<Player>().AddAsync(player);
+        await _unitOfWork.SaveChangesAsync();
+        return player;
+    }
+}
+```
+
+### Transaction Management
+```csharp
+public async Task<UserTeam> CreateUserTeamWithPlayersAsync(UserTeam team, List<int> playerIds)
 {
     await _unitOfWork.BeginTransactionAsync();
     
     try
     {
-        // Add team
+        // Create team
         await _unitOfWork.Repository<UserTeam>().AddAsync(team);
         await _unitOfWork.SaveChangesAsync();
         
         // Add players
-        foreach(var player in players)
+        foreach(var playerId in playerIds)
         {
             var userTeamPlayer = new UserTeamPlayer 
             { 
                 UserTeamId = team.Id, 
-                PlayerId = player.Id 
+                PlayerId = playerId,
+                AddedAt = DateTime.UtcNow
             };
             await _unitOfWork.Repository<UserTeamPlayer>().AddAsync(userTeamPlayer);
         }
@@ -141,45 +131,34 @@ public async Task<UserTeam> CreateUserTeamWithPlayersAsync(UserTeam team, List<P
 
 ## Benefits
 
-### 1. **Testability**
+### 1. Testability
 - Easy to mock repositories for unit testing
-- Clear separation of concerns
+- Clear separation between data access and business logic
 - Dependency injection friendly
 
-### 2. **Performance**
-- ConcurrentDictionary for repository caching
-- Proper async/await patterns
-- CancellationToken support
-- Efficient pagination
+### 2. Performance
+- ConcurrentDictionary for thread-safe repository caching
+- Efficient eager loading with includes
+- Proper async/await patterns with CancellationToken support
 
-### 3. **Maintainability**
+### 3. Maintainability
 - Single responsibility principle
 - Consistent API across all entities
 - Centralized transaction management
-- Proper error handling
 
-### 4. **Flexibility**
+### 4. Flexibility
 - Generic implementation reduces code duplication
-- Easy to extend with specific repositories if needed
-- Support for complex queries with includes
+- Easy to extend with specific repositories when needed
+- Support for complex queries and filtering
 
-## Best Practices Implemented
-
-1. **Async/Await**: All operations are async with CancellationToken support
-2. **Disposal Pattern**: Proper resource cleanup in UnitOfWork
-3. **Thread Safety**: ConcurrentDictionary for repository caching
-4. **Error Handling**: Comprehensive exception handling in services
-5. **Logging**: Structured logging throughout the application
-6. **Validation**: Business rule validation in service layer
-7. **Transaction Management**: Explicit transaction control when needed
-
-## Registration in DI Container
+## Service Registration
 
 ```csharp
-// In ServiceCollectionExtensions
+// In ServiceCollectionExtensions.cs
 services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 services.AddScoped<IUnitOfWork, UnitOfWork>();
-services.AddScoped<IUserService, UserService>();
+services.AddScoped<IPlayerService, PlayerService>();
+services.AddScoped<IUserTeamService, UserTeamService>();
 ```
 
-This implementation provides a robust foundation for data access in your fantasy football application while maintaining clean architecture principles and best practices.
+This implementation provides a robust, testable foundation for data access while maintaining clean architecture principles.

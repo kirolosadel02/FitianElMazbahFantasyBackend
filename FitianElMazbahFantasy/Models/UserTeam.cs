@@ -13,4 +13,6 @@ public class UserTeam
     // Navigation properties
     public virtual User User { get; set; } = null!;
     public virtual ICollection<UserTeamPlayer> UserTeamPlayers { get; set; } = new List<UserTeamPlayer>();
+    public virtual ICollection<UserTeamMatchweekPoints> MatchweekPoints { get; set; } = new List<UserTeamMatchweekPoints>();
+    public virtual ICollection<UserTeamSnapshot> TeamSnapshots { get; set; } = new List<UserTeamSnapshot>();
 }
