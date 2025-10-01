@@ -23,36 +23,6 @@ public class PlayerWithStatsDto : PlayerDto
     public double AveragePoints { get; set; }
 }
 
-public class CreatePlayerDto
-{
-    [Required]
-    [StringLength(100, MinimumLength = 2)]
-    public string Name { get; set; } = string.Empty;
-    
-    [Required]
-    [Range(1, 4, ErrorMessage = "Position must be between 1 (Goalkeeper) and 4 (Forward)")]
-    public int Position { get; set; } // PlayerPosition enum value
-    
-    [Required]
-    [Range(1, int.MaxValue, ErrorMessage = "TeamId must be a positive number")]
-    public int TeamId { get; set; }
-}
-
-public class UpdatePlayerDto
-{
-    [Required]
-    [StringLength(100, MinimumLength = 2)]
-    public string Name { get; set; } = string.Empty;
-    
-    [Required]
-    [Range(1, 4, ErrorMessage = "Position must be between 1 (Goalkeeper) and 4 (Forward)")]
-    public int Position { get; set; } // PlayerPosition enum value
-    
-    [Required]
-    [Range(1, int.MaxValue, ErrorMessage = "TeamId must be a positive number")]
-    public int TeamId { get; set; }
-}
-
 public class PlayerFilterDto
 {
     [Range(1, 4, ErrorMessage = "Position must be between 1 (Goalkeeper) and 4 (Forward)")]

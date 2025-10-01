@@ -178,11 +178,18 @@ public class MatchweekService : IMatchweekService
 
     public async Task<UserTeamSnapshot> CreateTeamSnapshotAsync(int userTeamId, int matchweekId, CancellationToken cancellationToken = default)
     {
+        // Early return if snapshot already exists (avoid transaction)
+        var existingSnapshot = await _unitOfWork.Repository<UserTeamSnapshot>()
+            .FirstOrDefaultAsync(uts => uts.UserTeamId == userTeamId && uts.MatchweekId == matchweekId, cancellationToken);
+        if (existingSnapshot != null)
+        {
+            return existingSnapshot;
+        }
+
         try
         {
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
-            // Get user team with players
             var userTeam = await _unitOfWork.Repository<UserTeam>()
                 .GetByIdAsync(userTeamId, cancellationToken, ut => ut.UserTeamPlayers);
 
@@ -191,17 +198,6 @@ public class MatchweekService : IMatchweekService
                 throw new InvalidOperationException($"User team with ID {userTeamId} not found");
             }
 
-            // Check if snapshot already exists
-            var existingSnapshot = await _unitOfWork.Repository<UserTeamSnapshot>()
-                .FirstOrDefaultAsync(uts => uts.UserTeamId == userTeamId && uts.MatchweekId == matchweekId, cancellationToken);
-
-            if (existingSnapshot != null)
-            {
-                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
-                return existingSnapshot;
-            }
-
-            // Create snapshot
             var snapshot = new UserTeamSnapshot
             {
                 UserTeamId = userTeamId,
@@ -214,7 +210,6 @@ public class MatchweekService : IMatchweekService
             await _unitOfWork.Repository<UserTeamSnapshot>().AddAsync(snapshot, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            // Create player snapshots
             var players = await _unitOfWork.Repository<UserTeamPlayer>()
                 .FindAsync(utp => utp.UserTeamId == userTeamId, cancellationToken, utp => utp.Player, utp => utp.Player.Team);
 
@@ -255,8 +250,8 @@ public class MatchweekService : IMatchweekService
         try
         {
             return await _unitOfWork.Repository<UserTeamSnapshot>()
-                .FindAsync(uts => uts.MatchweekId == matchweekId, cancellationToken, 
-                    uts => uts.UserTeam, 
+                .FindAsync(uts => uts.MatchweekId == matchweekId, cancellationToken,
+                    uts => uts.UserTeam,
                     uts => uts.PlayerSnapshots);
         }
         catch (Exception ex)

@@ -71,17 +71,20 @@ public class UserService : IUserService
     {
         try
         {
-            // Validate user doesn't exist
-            var existingByUsername = await IsUsernameExistsAsync(user.Username, cancellationToken);
-            if (existingByUsername)
-            {
-                throw new InvalidOperationException($"Username '{user.Username}' already exists");
-            }
+            // Single query to check existing username or email
+            var existingUser = await _unitOfWork.Repository<User>()
+                .FirstOrDefaultAsync(u => u.Username == user.Username || u.Email == user.Email, cancellationToken);
 
-            var existingByEmail = await IsEmailExistsAsync(user.Email, cancellationToken);
-            if (existingByEmail)
+            if (existingUser != null)
             {
-                throw new InvalidOperationException($"Email '{user.Email}' already exists");
+                if (existingUser.Username == user.Username)
+                {
+                    throw new InvalidOperationException($"Username '{user.Username}' already exists");
+                }
+                if (existingUser.Email == user.Email)
+                {
+                    throw new InvalidOperationException($"Email '{user.Email}' already exists");
+                }
             }
 
             user.CreatedAt = DateTime.UtcNow;

@@ -32,8 +32,8 @@ public class UserTeamService : IUserTeamService
     {
         try
         {
-            return await _unitOfWork.Repository<UserTeam>().GetByIdAsync(id, cancellationToken, 
-                ut => ut.User, 
+            return await _unitOfWork.Repository<UserTeam>().GetByIdAsync(id, cancellationToken,
+                ut => ut.User,
                 ut => ut.UserTeamPlayers.Select(utp => utp.Player).Select(p => p.Team));
         }
         catch (Exception ex)
@@ -48,8 +48,8 @@ public class UserTeamService : IUserTeamService
         try
         {
             return await _unitOfWork.Repository<UserTeam>().FirstOrDefaultAsync(
-                ut => ut.UserId == userId, 
-                cancellationToken, 
+                ut => ut.UserId == userId,
+                cancellationToken,
                 ut => ut.User);
         }
         catch (Exception ex)
@@ -64,9 +64,9 @@ public class UserTeamService : IUserTeamService
         try
         {
             return await _unitOfWork.Repository<UserTeam>().FirstOrDefaultAsync(
-                ut => ut.UserId == userId, 
-                cancellationToken, 
-                ut => ut.User, 
+                ut => ut.UserId == userId,
+                cancellationToken,
+                ut => ut.User,
                 ut => ut.UserTeamPlayers.Select(utp => utp.Player).Select(p => p.Team));
         }
         catch (Exception ex)
@@ -80,7 +80,6 @@ public class UserTeamService : IUserTeamService
     {
         try
         {
-            // Check if user already has a team - this constraint is now enforced at database level too
             var existingTeam = await UserHasTeamAsync(userTeam.UserId, cancellationToken);
             if (existingTeam)
             {
@@ -91,11 +90,8 @@ public class UserTeamService : IUserTeamService
             await _unitOfWork.Repository<UserTeam>().AddAsync(userTeam, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            // Return the created team with user info
-            var createdTeam = await GetUserTeamByIdAsync(userTeam.Id, cancellationToken);
-
             _logger.LogInformation("User team created successfully with id {UserTeamId} for user {UserId}", userTeam.Id, userTeam.UserId);
-            return createdTeam!;
+            return userTeam; // entity already tracked with generated Id
         }
         catch (Exception ex)
         {
@@ -112,11 +108,8 @@ public class UserTeamService : IUserTeamService
             _unitOfWork.Repository<UserTeam>().Update(userTeam);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            // Return the updated team with user info
-            var updatedTeam = await GetUserTeamByIdAsync(userTeam.Id, cancellationToken);
-
             _logger.LogInformation("User team updated successfully with id {UserTeamId}", userTeam.Id);
-            return updatedTeam!;
+            return userTeam; // returning updated tracked entity
         }
         catch (Exception ex)
         {
@@ -167,10 +160,9 @@ public class UserTeamService : IUserTeamService
     {
         try
         {
-            // Check if player is already in the team
             var existingPlayerTeam = await _unitOfWork.Repository<UserTeamPlayer>()
                 .FirstOrDefaultAsync(utp => utp.UserTeamId == teamId && utp.PlayerId == playerId, cancellationToken);
-            
+
             if (existingPlayerTeam != null)
             {
                 return false; // Player already in team
@@ -253,10 +245,9 @@ public class UserTeamService : IUserTeamService
     {
         try
         {
-            var goalkeepers = await _unitOfWork.Repository<UserTeamPlayer>()
-                .FindAsync(utp => utp.UserTeamId == teamId, cancellationToken, utp => utp.Player);
-
-            return goalkeepers.Count(utp => utp.Player?.Position == PlayerPosition.Goalkeeper);
+            // Optimize: perform count in DB if Position is navigable via join (relies on EF to translate)
+            return await _unitOfWork.Repository<UserTeamPlayer>()
+                .CountAsync(utp => utp.UserTeamId == teamId && utp.Player.Position == PlayerPosition.Goalkeeper, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -269,10 +260,8 @@ public class UserTeamService : IUserTeamService
     {
         try
         {
-            var playersFromTeam = await _unitOfWork.Repository<UserTeamPlayer>()
-                .FindAsync(utp => utp.UserTeamId == userTeamId, cancellationToken, utp => utp.Player);
-
-            return playersFromTeam.Any(utp => utp.Player?.TeamId == realTeamId);
+            return await _unitOfWork.Repository<UserTeamPlayer>()
+                .AnyAsync(utp => utp.UserTeamId == userTeamId && utp.Player.TeamId == realTeamId, cancellationToken);
         }
         catch (Exception ex)
         {
