@@ -32,6 +32,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddServices(this IServiceCollection services)
     {
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IUserTeamService, UserTeamService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         
@@ -80,6 +81,32 @@ public static class ServiceCollectionExtensions
 
             options.Events = new JwtBearerEvents
             {
+                OnMessageReceived = context =>
+                {
+                    var authorizationHeader = context.Request.Headers.Authorization.FirstOrDefault();
+                    
+                    if (!string.IsNullOrEmpty(authorizationHeader))
+                    {
+                        // If the header doesn't start with "Bearer ", automatically handle it
+                        if (!authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Check if it looks like a JWT token (starts with 'eyJ' which is base64 encoded '{')
+                            if (authorizationHeader.StartsWith("eyJ"))
+                            {
+                                context.Token = authorizationHeader;
+                                var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();
+                                logger?.LogDebug("Auto-handled JWT token without Bearer prefix");
+                            }
+                        }
+                        else
+                        {
+                            // Extract token after "Bearer "
+                            context.Token = authorizationHeader.Substring("Bearer ".Length);
+                        }
+                    }
+                    
+                    return Task.CompletedTask;
+                },
                 OnAuthenticationFailed = context =>
                 {
                     var logger = context.HttpContext.RequestServices.GetService<ILogger<Program>>();

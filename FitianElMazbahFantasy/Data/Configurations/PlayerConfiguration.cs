@@ -26,11 +26,6 @@ public class PlayerConfiguration : IEntityTypeConfiguration<Player>
         builder.Property(p => p.TeamId)
             .IsRequired();
             
-        builder.Property(p => p.Price)
-            .IsRequired()
-            .HasColumnType("decimal(10,2)")
-            .HasDefaultValue(0.0m);
-            
         builder.Property(p => p.CreatedAt)
             .IsRequired()
             .HasDefaultValueSql("GETUTCDATE()");

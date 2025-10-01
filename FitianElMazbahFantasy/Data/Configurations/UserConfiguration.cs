@@ -42,9 +42,9 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.Email).IsUnique();
         
         // Relationships
-        builder.HasMany(u => u.UserTeams)
+        builder.HasOne(u => u.UserTeam)
             .WithOne(ut => ut.User)
-            .HasForeignKey(ut => ut.UserId)
+            .HasForeignKey<UserTeam>(ut => ut.UserId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

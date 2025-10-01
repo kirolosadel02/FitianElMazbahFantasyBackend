@@ -1,4 +1,3 @@
-using FitianElMazbahFantasy.Data;
 using FitianElMazbahFantasy.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,7 +27,7 @@ builder.Services.AddSwaggerGen(c =>
     // Add JWT authentication to Swagger
     c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.",
+        Description = "JWT Authorization header. Enter your JWT token directly (without 'Bearer ' prefix - it will be added automatically).",
         Name = "Authorization",
         In = Microsoft.OpenApi.Models.ParameterLocation.Header,
         Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,

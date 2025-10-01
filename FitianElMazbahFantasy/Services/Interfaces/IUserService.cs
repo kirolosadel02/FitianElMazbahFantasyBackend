@@ -1,12 +1,10 @@
 using FitianElMazbahFantasy.Models;
-using FitianElMazbahFantasy.Repositories.Interfaces;
 
 namespace FitianElMazbahFantasy.Services.Interfaces;
 
 public interface IUserService
 {
     Task<User?> GetUserByIdAsync(int id, CancellationToken cancellationToken = default);
-    Task<User?> GetUserWithTeamsAsync(int id, CancellationToken cancellationToken = default);
     Task<IEnumerable<User>> GetAllUsersAsync(CancellationToken cancellationToken = default);
     Task<User?> GetUserByUsernameAsync(string username, CancellationToken cancellationToken = default);
     Task<User?> GetUserByEmailAsync(string email, CancellationToken cancellationToken = default);

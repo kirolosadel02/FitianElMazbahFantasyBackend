@@ -28,19 +28,6 @@ public class UserService : IUserService
         }
     }
 
-    public async Task<User?> GetUserWithTeamsAsync(int id, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            return await _unitOfWork.Repository<User>().GetByIdAsync(id, cancellationToken, u => u.UserTeams);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting user with teams by id {UserId}", id);
-            throw;
-        }
-    }
-
     public async Task<IEnumerable<User>> GetAllUsersAsync(CancellationToken cancellationToken = default)
     {
         try

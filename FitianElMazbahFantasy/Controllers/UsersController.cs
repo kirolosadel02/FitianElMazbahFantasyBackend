@@ -166,12 +166,20 @@ public class UsersController : ControllerBase
     {
         try
         {
+            _logger.LogInformation("GetUser called for ID: {Id}", id);
+            _logger.LogInformation("User claims: {Claims}", string.Join(", ", User.Claims.Select(c => $"{c.Type}:{c.Value}")));
+            
             var currentUserId = GetCurrentUserId();
             var currentUserRole = GetCurrentUserRole();
+            
+            _logger.LogInformation("Current User ID: {CurrentUserId}, Requested ID: {RequestedId}, Role: {Role}", 
+                currentUserId, id, currentUserRole);
 
             // Users can only get their own profile, admins can get any profile
             if (currentUserRole != "Admin" && currentUserId != id)
             {
+                _logger.LogWarning("Access denied. User {CurrentUserId} tried to access user {RequestedId}", 
+                    currentUserId, id);
                 return Forbid();
             }
 
@@ -191,6 +199,11 @@ public class UsersController : ControllerBase
             };
 
             return Ok(userDto);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Unauthorized access in GetUser for id {UserId}", id);
+            return Unauthorized(new { message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -231,35 +244,6 @@ public class UsersController : ControllerBase
         }
     }
 
-    [HttpGet("{id}/teams")]
-    [Authorize]
-    public async Task<ActionResult<User>> GetUserWithTeams(int id, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var currentUserId = GetCurrentUserId();
-            var currentUserRole = GetCurrentUserRole();
-
-            // Users can only get their own teams, admins can get any user's teams
-            if (currentUserRole != "Admin" && currentUserId != id)
-            {
-                return Forbid();
-            }
-
-            var user = await _userService.GetUserWithTeamsAsync(id, cancellationToken);
-            if (user == null)
-            {
-                return NotFound();
-            }
-            return Ok(user);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting user with teams for id {UserId}", id);
-            return StatusCode(500, new { message = "Internal server error" });
-        }
-    }
-
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult> DeleteUser(int id, CancellationToken cancellationToken = default)
@@ -286,21 +270,74 @@ public class UsersController : ControllerBase
 
     private int GetCurrentUserId()
     {
-        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
-                         User.FindFirst("userId")?.Value;
-        
-        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        try
         {
-            throw new UnauthorizedAccessException("User ID not found in token");
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
+                             User.FindFirst("userId")?.Value;
+            
+            _logger.LogDebug("UserID claim value: {UserIdClaim}", userIdClaim);
+            
+            if (string.IsNullOrEmpty(userIdClaim))
+            {
+                _logger.LogError("User ID claim not found in token. Available claims: {Claims}", 
+                    string.Join(", ", User.Claims.Select(c => $"{c.Type}:{c.Value}")));
+                throw new UnauthorizedAccessException("User ID not found in token");
+            }
+            
+            if (!int.TryParse(userIdClaim, out var userId))
+            {
+                _logger.LogError("Cannot parse User ID claim to integer. Value: {UserIdClaim}", userIdClaim);
+                throw new UnauthorizedAccessException("Invalid User ID format in token");
+            }
+            
+            return userId;
         }
-        
-        return userId;
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting user ID from claims");
+            throw;
+        }
     }
 
     private string GetCurrentUserRole()
     {
-        return User.FindFirst(ClaimTypes.Role)?.Value ?? "User";
+        try
+        {
+            var role = User.FindFirst(ClaimTypes.Role)?.Value ?? "User";
+            _logger.LogDebug("User role: {Role}", role);
+            return role;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting user role from claims");
+            return "User";
+        }
     }
 
     #endregion
+
+    [HttpGet("test-auth")]
+    [Authorize]
+    public ActionResult TestAuth()
+    {
+        try
+        {
+            var claims = User.Claims.Select(c => new { c.Type, c.Value }).ToList();
+            var userId = GetCurrentUserId();
+            var userRole = GetCurrentUserRole();
+            
+            return Ok(new
+            {
+                IsAuthenticated = User.Identity?.IsAuthenticated,
+                UserId = userId,
+                UserRole = userRole,
+                Claims = claims
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in test auth endpoint");
+            return StatusCode(500, new { message = ex.Message });
+        }
+    }
 }

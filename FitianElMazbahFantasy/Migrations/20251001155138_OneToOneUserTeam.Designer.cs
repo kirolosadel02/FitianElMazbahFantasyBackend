@@ -4,6 +4,7 @@ using FitianElMazbahFantasy.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FitianElMazbahFantasy.Migrations
 {
     [DbContext(typeof(FitianElMazbahFantasyDbContext))]
-    partial class FitianElMazbahFantasyDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251001155138_OneToOneUserTeam")]
+    partial class OneToOneUserTeam
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -212,6 +215,11 @@ namespace FitianElMazbahFantasy.Migrations
 
                     b.Property<int>("Position")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("Price")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(10,2)")
+                        .HasDefaultValue(0.0m);
 
                     b.Property<int>("TeamId")
                         .HasColumnType("int");

@@ -16,6 +16,6 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    // Navigation properties
-    public virtual ICollection<UserTeam> UserTeams { get; set; } = new List<UserTeam>();
+    // Navigation property
+    public virtual UserTeam? UserTeam { get; set; }
 }

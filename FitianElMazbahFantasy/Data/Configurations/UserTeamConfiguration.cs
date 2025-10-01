@@ -37,13 +37,13 @@ public class UserTeamConfiguration : IEntityTypeConfiguration<UserTeam>
         builder.Property(ut => ut.UpdatedAt);
 
         // Indexes
-        builder.HasIndex(ut => ut.UserId);
+        builder.HasIndex(ut => ut.UserId).IsUnique(); // Make UserId unique - one team per user
         builder.HasIndex(ut => ut.TotalPoints);
         
         // Relationships
         builder.HasOne(ut => ut.User)
-            .WithMany(u => u.UserTeams)
-            .HasForeignKey(ut => ut.UserId)
+            .WithOne(u => u.UserTeam)
+            .HasForeignKey<UserTeam>(ut => ut.UserId)
             .OnDelete(DeleteBehavior.Cascade);
             
         builder.HasMany(ut => ut.UserTeamPlayers)
