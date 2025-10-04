@@ -21,6 +21,10 @@ public class FitianElMazbahFantasyDbContext : DbContext
     public DbSet<MatchEvent> MatchEvents { get; set; }
     public DbSet<LeagueStanding> LeagueStandings { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<Matchweek> Matchweeks { get; set; }
+    public DbSet<UserTeamMatchweekPoints> UserTeamMatchweekPoints { get; set; }
+    public DbSet<UserTeamSnapshot> UserTeamSnapshots { get; set; }
+    public DbSet<UserTeamSnapshotPlayer> UserTeamSnapshotPlayers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,5 +41,9 @@ public class FitianElMazbahFantasyDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MatchEventConfiguration());
         modelBuilder.ApplyConfiguration(new LeagueStandingConfiguration());
         modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new MatchweekConfiguration());
+        modelBuilder.ApplyConfiguration(new UserTeamMatchweekPointsConfiguration());
+        modelBuilder.ApplyConfiguration(new UserTeamSnapshotConfiguration());
+        modelBuilder.ApplyConfiguration(new UserTeamSnapshotPlayerConfiguration());
     }
 }

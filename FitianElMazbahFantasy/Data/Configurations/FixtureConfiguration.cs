@@ -36,11 +36,9 @@ public class FixtureConfiguration : IEntityTypeConfiguration<Fixture>
             
         builder.Property(f => f.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
-            .HasColumnType("datetimeoffset");
+            .HasDefaultValueSql("GETUTCDATE()");
             
-        builder.Property(f => f.UpdatedAt)
-            .HasColumnType("datetimeoffset");
+        builder.Property(f => f.UpdatedAt);
 
         // Indexes
         builder.HasIndex(f => f.MatchWeek);
