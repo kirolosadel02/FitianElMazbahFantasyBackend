@@ -11,7 +11,7 @@ public static class UserTeamMappingExtensions
         {
             Id = userTeam.Id,
             UserId = userTeam.UserId,
-            Username = userTeam.User?.Username ?? string.Empty,
+            Username = userTeam.User?.UserName ?? string.Empty,
             TeamName = userTeam.TeamName,
             TotalPoints = userTeam.TotalPoints,
             IsLocked = userTeam.IsLocked,
@@ -27,7 +27,7 @@ public static class UserTeamMappingExtensions
         {
             Id = userTeam.Id,
             UserId = userTeam.UserId,
-            Username = userTeam.User?.Username ?? string.Empty,
+            Username = userTeam.User?.UserName ?? string.Empty,
             TeamName = userTeam.TeamName,
             TotalPoints = userTeam.TotalPoints,
             IsLocked = userTeam.IsLocked,

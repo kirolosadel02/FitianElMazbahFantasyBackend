@@ -45,7 +45,7 @@ public class UserService : IUserService
     {
         try
         {
-            return await _unitOfWork.Repository<User>().FirstOrDefaultAsync(u => u.Username == username, cancellationToken);
+            return await _unitOfWork.Repository<User>().FirstOrDefaultAsync(u => u.UserName == username, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -73,13 +73,13 @@ public class UserService : IUserService
         {
             // Single query to check existing username or email
             var existingUser = await _unitOfWork.Repository<User>()
-                .FirstOrDefaultAsync(u => u.Username == user.Username || u.Email == user.Email, cancellationToken);
+                .FirstOrDefaultAsync(u => u.UserName == user.UserName || u.Email == user.Email, cancellationToken);
 
             if (existingUser != null)
             {
-                if (existingUser.Username == user.Username)
+                if (existingUser.UserName == user.UserName)
                 {
-                    throw new InvalidOperationException($"Username '{user.Username}' already exists");
+                    throw new InvalidOperationException($"Username '{user.UserName}' already exists");
                 }
                 if (existingUser.Email == user.Email)
                 {
@@ -96,7 +96,7 @@ public class UserService : IUserService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating user with username {Username}", user.Username);
+            _logger.LogError(ex, "Error creating user with username {Username}", user.UserName);
             throw;
         }
     }
@@ -146,7 +146,7 @@ public class UserService : IUserService
     {
         try
         {
-            return await _unitOfWork.Repository<User>().AnyAsync(u => u.Username == username, cancellationToken);
+            return await _unitOfWork.Repository<User>().AnyAsync(u => u.UserName == username, cancellationToken);
         }
         catch (Exception ex)
         {

@@ -1,8 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using FitianElMazbahFantasy.Data;
+using FitianElMazbahFantasy.Models;
 using FitianElMazbahFantasy.Repositories.Interfaces;
 using FitianElMazbahFantasy.Repositories.Implementations;
 using FitianElMazbahFantasy.Services.Interfaces;
@@ -17,6 +19,36 @@ public static class ServiceCollectionExtensions
     {
         services.AddDbContext<FitianElMazbahFantasyDbContext>(options =>
             options.UseSqlServer(connectionString));
+
+        return services;
+    }
+
+    public static IServiceCollection AddIdentityConfiguration(this IServiceCollection services)
+    {
+        services.AddIdentity<User, IdentityRole<int>>(options =>
+        {
+            // Password settings
+            options.Password.RequireDigit = true;
+            options.Password.RequireLowercase = true;
+            options.Password.RequireUppercase = true;
+            options.Password.RequireNonAlphanumeric = true;
+            options.Password.RequiredLength = 8;
+
+            // Lockout settings
+            options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+            options.Lockout.MaxFailedAccessAttempts = 5;
+            options.Lockout.AllowedForNewUsers = true;
+
+            // User settings
+            options.User.RequireUniqueEmail = true;
+            options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+            
+            // SignIn settings
+            options.SignIn.RequireConfirmedEmail = false;
+            options.SignIn.RequireConfirmedPhoneNumber = false;
+        })
+        .AddEntityFrameworkStores<FitianElMazbahFantasyDbContext>()
+        .AddDefaultTokenProviders();
 
         return services;
     }

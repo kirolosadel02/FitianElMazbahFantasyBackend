@@ -32,11 +32,11 @@ public class JwtService : IJwtService
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new(ClaimTypes.Name, user.Username),
-            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Name, user.UserName ?? string.Empty),
+            new(ClaimTypes.Email, user.Email ?? string.Empty),
             new(ClaimTypes.Role, user.Role.ToString()),
             new("userId", user.Id.ToString()),
-            new("username", user.Username)
+            new("username", user.UserName ?? string.Empty)
         };
 
         var tokenDescriptor = new SecurityTokenDescriptor

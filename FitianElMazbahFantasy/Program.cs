@@ -10,6 +10,9 @@ builder.Services.AddControllers();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDatabase(connectionString!);
 
+// Add Identity (must be after AddDatabase and before AddJwtAuthentication)
+builder.Services.AddIdentityConfiguration();
+
 // Add repositories and unit of work
 builder.Services.AddRepositories();
 

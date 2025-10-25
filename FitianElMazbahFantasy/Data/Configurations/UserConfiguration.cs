@@ -10,22 +10,8 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.ToTable("Users");
         
-        builder.HasKey(u => u.Id);
-        
-        builder.Property(u => u.Id)
-            .ValueGeneratedOnAdd();
-            
-        builder.Property(u => u.Username)
-            .IsRequired()
-            .HasMaxLength(50);
-            
-        builder.Property(u => u.Email)
-            .IsRequired()
-            .HasMaxLength(255);
-            
-        builder.Property(u => u.Password)
-            .IsRequired()
-            .HasMaxLength(255);
+        // Identity already configures Id, UserName, Email, and PasswordHash
+        // We only need to configure our custom properties
             
         builder.Property(u => u.Role)
             .IsRequired()
@@ -37,10 +23,6 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             
         builder.Property(u => u.UpdatedAt);
 
-        // Unique constraints
-        builder.HasIndex(u => u.Username).IsUnique();
-        builder.HasIndex(u => u.Email).IsUnique();
-        
         // Relationships
         builder.HasOne(u => u.UserTeam)
             .WithOne(ut => ut.User)

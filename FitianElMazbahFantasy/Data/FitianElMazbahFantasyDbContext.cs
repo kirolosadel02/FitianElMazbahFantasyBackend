@@ -1,17 +1,18 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using FitianElMazbahFantasy.Models;
 using FitianElMazbahFantasy.Data.Configurations;
 
 namespace FitianElMazbahFantasy.Data;
 
-public class FitianElMazbahFantasyDbContext : DbContext
+public class FitianElMazbahFantasyDbContext : IdentityDbContext<User, IdentityRole<int>, int>
 {
     public FitianElMazbahFantasyDbContext(DbContextOptions<FitianElMazbahFantasyDbContext> options) : base(options)
     {
     }
 
     // DbSets
-    public DbSet<User> Users { get; set; }
     public DbSet<Team> Teams { get; set; }
     public DbSet<Player> Players { get; set; }
     public DbSet<UserTeam> UserTeams { get; set; }

@@ -137,7 +137,7 @@ public class UsersController : ControllerBase
     #region User Management (Admin Only)
 
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<IEnumerable<UserDto>>> GetAllUsers(CancellationToken cancellationToken = default)
     {
         try
@@ -146,7 +146,7 @@ public class UsersController : ControllerBase
             var userDtos = users.Select(u => new UserDto
             {
                 Id = u.Id,
-                Username = u.Username,
+                Username = u.UserName,
                 Email = u.Email,
                 Role = u.Role.ToString(),
                 CreatedAt = u.CreatedAt
@@ -161,28 +161,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<UserDto>> GetUser(int id, CancellationToken cancellationToken = default)
     {
         try
         {
-            _logger.LogInformation("GetUser called for ID: {Id}", id);
-            _logger.LogInformation("User claims: {Claims}", string.Join(", ", User.Claims.Select(c => $"{c.Type}:{c.Value}")));
-            
-            var currentUserId = GetCurrentUserId();
-            var currentUserRole = GetCurrentUserRole();
-            
-            _logger.LogInformation("Current User ID: {CurrentUserId}, Requested ID: {RequestedId}, Role: {Role}", 
-                currentUserId, id, currentUserRole);
-
-            // Users can only get their own profile, admins can get any profile
-            if (currentUserRole != "Admin" && currentUserId != id)
-            {
-                _logger.LogWarning("Access denied. User {CurrentUserId} tried to access user {RequestedId}", 
-                    currentUserId, id);
-                return Forbid();
-            }
-
             var user = await _userService.GetUserByIdAsync(id, cancellationToken);
             if (user == null)
             {
@@ -192,7 +175,7 @@ public class UsersController : ControllerBase
             var userDto = new UserDto
             {
                 Id = user.Id,
-                Username = user.Username,
+                Username = user.UserName,
                 Email = user.Email,
                 Role = user.Role.ToString(),
                 CreatedAt = user.CreatedAt
@@ -229,7 +212,7 @@ public class UsersController : ControllerBase
             var userDto = new UserDto
             {
                 Id = user.Id,
-                Username = user.Username,
+                Username = user.UserName,
                 Email = user.Email,
                 Role = user.Role.ToString(),
                 CreatedAt = user.CreatedAt

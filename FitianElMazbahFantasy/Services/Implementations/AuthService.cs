@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using FitianElMazbahFantasy.Models;
 using FitianElMazbahFantasy.DTOs.Auth;
@@ -10,17 +10,23 @@ namespace FitianElMazbahFantasy.Services.Implementations;
 
 public class AuthService : IAuthService
 {
+    private readonly UserManager<User> _userManager;
+    private readonly SignInManager<User> _signInManager;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IJwtService _jwtService;
     private readonly JwtSettings _jwtSettings;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
+        UserManager<User> userManager,
+        SignInManager<User> signInManager,
         IUnitOfWork unitOfWork,
         IJwtService jwtService,
         IOptions<JwtSettings> jwtSettings,
         ILogger<AuthService> logger)
     {
+        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _signInManager = signInManager ?? throw new ArgumentNullException(nameof(signInManager));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _jwtService = jwtService ?? throw new ArgumentNullException(nameof(jwtService));
         _jwtSettings = jwtSettings.Value ?? throw new ArgumentNullException(nameof(jwtSettings));
@@ -31,42 +37,32 @@ public class AuthService : IAuthService
     {
         try
         {
-            // Check if username exists
-            var existingUserByUsername = await _unitOfWork.Repository<User>()
-                .FirstOrDefaultAsync(u => u.Username == registerDto.Username, cancellationToken);
-            
-            if (existingUserByUsername != null)
-            {
-                throw new InvalidOperationException("Username already exists");
-            }
-
-            // Check if email exists
-            var existingUserByEmail = await _unitOfWork.Repository<User>()
-                .FirstOrDefaultAsync(u => u.Email == registerDto.Email, cancellationToken);
-                
-            if (existingUserByEmail != null)
-            {
-                throw new InvalidOperationException("Email already exists");
-            }
-
-            // Create new user - Only allow User role registration
+            // Create new user
             var user = new User
             {
-                Username = registerDto.Username,
+                UserName = registerDto.Username,
                 Email = registerDto.Email,
-                Password = HashPassword(registerDto.Password),
                 Role = UserRole.User, // Always set to User role
                 CreatedAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.Repository<User>().AddAsync(user, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            // Use Identity to create user with password
+            var result = await _userManager.CreateAsync(user, registerDto.Password);
+            
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Registration failed: {errors}");
+            }
+
+            // Assign default role
+            await _userManager.AddToRoleAsync(user, "User");
 
             // Generate tokens
             var accessToken = _jwtService.GenerateAccessToken(user);
             var refreshToken = await _jwtService.CreateRefreshTokenAsync(user.Id, cancellationToken);
 
-            _logger.LogInformation("User registered successfully: {Username}", user.Username);
+            _logger.LogInformation("User registered successfully: {Username}", user.UserName);
 
             return new AuthResponseDto
             {
@@ -76,7 +72,7 @@ public class AuthService : IAuthService
                 User = new UserDto
                 {
                     Id = user.Id,
-                    Username = user.Username,
+                    Username = user.UserName,
                     Email = user.Email,
                     Role = user.Role.ToString(),
                     CreatedAt = user.CreatedAt
@@ -95,11 +91,23 @@ public class AuthService : IAuthService
         try
         {
             // Find user by username or email
-            var user = await _unitOfWork.Repository<User>()
-                .FirstOrDefaultAsync(u => u.Username == loginDto.UsernameOrEmail || u.Email == loginDto.UsernameOrEmail, cancellationToken);
+            var user = await _userManager.FindByNameAsync(loginDto.UsernameOrEmail)
+                ?? await _userManager.FindByEmailAsync(loginDto.UsernameOrEmail);
 
-            if (user == null || !VerifyPassword(loginDto.Password, user.Password))
+            if (user == null)
             {
+                throw new UnauthorizedAccessException("Invalid credentials");
+            }
+
+            // Use SignInManager to check password (handles lockout automatically)
+            var result = await _signInManager.CheckPasswordSignInAsync(user, loginDto.Password, lockoutOnFailure: true);
+
+            if (!result.Succeeded)
+            {
+                if (result.IsLockedOut)
+                {
+                    throw new UnauthorizedAccessException("Account locked due to multiple failed login attempts. Please try again later.");
+                }
                 throw new UnauthorizedAccessException("Invalid credentials");
             }
 
@@ -107,7 +115,7 @@ public class AuthService : IAuthService
             var accessToken = _jwtService.GenerateAccessToken(user);
             var refreshToken = await _jwtService.CreateRefreshTokenAsync(user.Id, cancellationToken);
 
-            _logger.LogInformation("User logged in successfully: {Username}", user.Username);
+            _logger.LogInformation("User logged in successfully: {Username}", user.UserName);
 
             return new AuthResponseDto
             {
@@ -117,7 +125,7 @@ public class AuthService : IAuthService
                 User = new UserDto
                 {
                     Id = user.Id,
-                    Username = user.Username,
+                    Username = user.UserName,
                     Email = user.Email,
                     Role = user.Role.ToString(),
                     CreatedAt = user.CreatedAt
@@ -158,7 +166,7 @@ public class AuthService : IAuthService
             var newAccessToken = _jwtService.GenerateAccessToken(refreshToken.User);
             var newRefreshToken = await _jwtService.CreateRefreshTokenAsync(refreshToken.UserId, cancellationToken);
 
-            _logger.LogInformation("Token refreshed for user: {Username}", refreshToken.User.Username);
+            _logger.LogInformation("Token refreshed for user: {Username}", refreshToken.User.UserName);
 
             return new AuthResponseDto
             {
@@ -168,7 +176,7 @@ public class AuthService : IAuthService
                 User = new UserDto
                 {
                     Id = refreshToken.User.Id,
-                    Username = refreshToken.User.Username,
+                    Username = refreshToken.User.UserName,
                     Email = refreshToken.User.Email,
                     Role = refreshToken.User.Role.ToString(),
                     CreatedAt = refreshToken.User.CreatedAt
@@ -208,20 +216,5 @@ public class AuthService : IAuthService
             _logger.LogError(ex, "Error during logout all devices");
             throw;
         }
-    }
-
-    public string HashPassword(string password)
-    {
-        // Using BCrypt for password hashing (simple implementation for demo)
-        // In production, consider using ASP.NET Core Identity or BCrypt.Net
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(password + "SaltKey"));
-        return Convert.ToBase64String(hashedBytes);
-    }
-
-    public bool VerifyPassword(string password, string hashedPassword)
-    {
-        var hashToVerify = HashPassword(password);
-        return hashToVerify == hashedPassword;
     }
 }
